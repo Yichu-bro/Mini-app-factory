@@ -27,7 +27,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-const ADMIN_SECRET_KEY = process.env.ADMIN_SECRET_KEY || "123@Create";
+const ADMIN_SECRET_KEY = process.env.ADMIN_SECRET_KEY || "123@Creator";
 const botInstances = new Map(); // This will hold all the active bot instances
 
 // --- Main Platform Bot (The one that creates other apps) ---
