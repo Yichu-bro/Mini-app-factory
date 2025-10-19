@@ -5,14 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create Your Mini App</title>
     <style>
-        body { font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; background-color: #f0f2f5; margin: 0; }
-        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 90%; max-width: 400px; }
-        h1 { margin-bottom: 20px; text-align: center; }
+        body { font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; background-color: #f0f2f5; margin: 0; padding: 20px; box-sizing: border-box; }
+        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        h1 { margin-bottom: 20px; text-align: center; color: #333; }
         .input-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-weight: 500; }
-        input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; }
-        button { width: 100%; padding: 15px; border: none; border-radius: 8px; background-color: #007bff; color: white; font-size: 1.1rem; font-weight: 600; cursor: pointer; }
-        #status { text-align: center; margin-top: 20px; font-weight: 500; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; color: #555; }
+        input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; border: none; border-radius: 8px; background-color: #007bff; color: white; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
+        button:disabled { background-color: #a0a0a0; cursor: not-allowed; }
+        button:hover:not(:disabled) { background-color: #0056b3; }
+        #status { text-align: center; margin-top: 20px; font-weight: 500; min-height: 1.2em; }
     </style>
 </head>
 <body>
@@ -26,15 +28,14 @@
             <label for="botToken">Your Bot Token</label>
             <input type="text" id="botToken" placeholder="Get this from @BotFather">
         </div>
-        <!-- YOUR RENDER URL HAS BEEN ADDED HERE -->
-        <input type="hidden" id="backendUrl" value="https://mini-app-factory.onrender.com">
         <button id="createBtn">Create My App</button>
         <p id="status"></p>
     </div>
 
     <script>
-        // YOUR RENDER URL HAS BEEN ADDED HERE
-        const API_BASE_URL = 'https://mini-app-factory.onrender.com';
+        // Since this file is served from the same domain as the API,
+        // we can use a relative path. No full URL needed.
+        const API_BASE_URL = '/'; 
         const createBtn = document.getElementById('createBtn');
         const statusEl = document.getElementById('status');
         
@@ -42,13 +43,12 @@
         const creatorId = urlParams.get('creatorId');
 
         if (!creatorId) {
-            document.body.innerHTML = '<h1>Error: Creator ID not found. Please open from the main bot.</h1>';
+            document.body.innerHTML = '<h1>Error: Creator ID not found. Please open this page from your main platform bot.</h1>';
         }
 
         createBtn.addEventListener('click', async () => {
             const appName = document.getElementById('appName').value.trim();
             const botToken = document.getElementById('botToken').value.trim();
-            const backendUrl = document.getElementById('backendUrl').value.trim();
 
             if (!appName || !botToken) {
                 statusEl.textContent = 'Please fill in all fields.';
@@ -59,16 +59,19 @@
             statusEl.textContent = 'Creating your app... Please wait.';
             statusEl.style.color = 'black';
             createBtn.disabled = true;
+            createBtn.textContent = 'Working...';
 
             try {
-                const response = await fetch(`${API_BASE_URL}/api/create-app`, {
+                const response = await fetch(`${API_BASE_URL}api/create-app`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ creatorId, botToken, appName, backendUrl })
+                    body: JSON.stringify({ creatorId, botToken, appName })
                 });
 
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.error);
+                if (!response.ok) {
+                    throw new Error(data.error || 'An unknown error occurred.');
+                }
                 
                 statusEl.textContent = 'Success! Your app is ready. Send /start to your new bot to see it in action.';
                 statusEl.style.color = 'green';
@@ -77,6 +80,7 @@
                 statusEl.textContent = `Error: ${error.message}`;
                 statusEl.style.color = 'red';
                 createBtn.disabled = false;
+                createBtn.textContent = 'Create My App';
             }
         });
     </script>
