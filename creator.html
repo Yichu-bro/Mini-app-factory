@@ -26,12 +26,15 @@
             <label for="botToken">Your Bot Token</label>
             <input type="text" id="botToken" placeholder="Get this from @BotFather">
         </div>
+        <!-- YOUR RENDER URL HAS BEEN ADDED HERE -->
+        <input type="hidden" id="backendUrl" value="https://mini-app-factory.onrender.com">
         <button id="createBtn">Create My App</button>
         <p id="status"></p>
     </div>
 
     <script>
-        const API_BASE_URL = 'https://mini-app-factory.onrender.com'; // Your Render backend URL
+        // YOUR RENDER URL HAS BEEN ADDED HERE
+        const API_BASE_URL = 'https://mini-app-factory.onrender.com';
         const createBtn = document.getElementById('createBtn');
         const statusEl = document.getElementById('status');
         
@@ -45,6 +48,7 @@
         createBtn.addEventListener('click', async () => {
             const appName = document.getElementById('appName').value.trim();
             const botToken = document.getElementById('botToken').value.trim();
+            const backendUrl = document.getElementById('backendUrl').value.trim();
 
             if (!appName || !botToken) {
                 statusEl.textContent = 'Please fill in all fields.';
@@ -60,13 +64,13 @@
                 const response = await fetch(`${API_BASE_URL}/api/create-app`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ creatorId, botToken, appName })
+                    body: JSON.stringify({ creatorId, botToken, appName, backendUrl })
                 });
 
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error);
                 
-                statusEl.textContent = 'Success! Your app is ready. You can now manage it via the /start command in your bot.';
+                statusEl.textContent = 'Success! Your app is ready. Send /start to your new bot to see it in action.';
                 statusEl.style.color = 'green';
 
             } catch (error) {
@@ -77,4 +81,4 @@
         });
     </script>
 </body>
-          </html>
+</html>
