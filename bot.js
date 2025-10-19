@@ -38,7 +38,7 @@ const platformBot = new TelegramBot(PLATFORM_BOT_TOKEN, { polling: true });
 platformBot.onText(/\/start/, (msg) => {
     platformBot.sendMessage(msg.chat.id, "Welcome! This bot helps you create your own Besh Besh style Mini App. Please open the creator app to get started.", {
         reply_markup: {
-            inline_keyboard: [[{ text: '🚀 Create Your App', web_app: { url: `https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPO_NAME/creator.html?creatorId=${msg.chat.id}` } }]]
+            inline_keyboard: [[{ text: '🚀 Create Your App', web_app: { url: `https://yichu-bro.github.io/Mini-app-factory/creator.html?creatorId=${msg.chat.id}` } }]]
         }
     });
 });
