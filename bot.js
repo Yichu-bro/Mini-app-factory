@@ -24,45 +24,35 @@ const db = getDatabase(appFB);
 // 🤖 Server Setup
 // ============================
 const app = express();
-app.use(express.json()); // Use express's built-in parser
+app.use(express.json());
 app.use(cors());
 
-// This is the bot that users talk to TO CREATE their own app.
-// We get the token from environment variables for security.
 const PLATFORM_BOT_TOKEN = process.env.PLATFORM_BOT_TOKEN;
 if (!PLATFORM_BOT_TOKEN) {
     console.error("CRITICAL ERROR: PLATFORM_BOT_TOKEN is not set in environment variables!");
     process.exit(1);
 }
-// This instance has the specific logic for creating apps. NO POLLING.
-const platformBot = new TelegramBot(PLATFORM_BOT_TOKEN);
 
-// This is a secret path for your webhook to make it secure
+const platformBot = new TelegramBot(PLATFORM_BOT_TOKEN);
 const WEBHOOK_SECRET_PATH = `bot${PLATFORM_BOT_TOKEN.substring(0, 8)}`;
 
 // ============================
 // ➡️ Webhook Logic - THE HEART OF THE PLATFORM
 // ============================
 
-// This single endpoint receives updates for ALL bots created on the platform
 app.post(`/${WEBHOOK_SECRET_PATH}/:botToken`, (req, res) => {
     const { botToken } = req.params;
     const update = req.body;
 
-    // Route the update to the correct logic
     if (botToken === PLATFORM_BOT_TOKEN) {
-        // If the update is for our MAIN platform bot, process it here
         platformBot.processUpdate(update);
     } else {
-        // If the update is for a CREATED bot, handle it dynamically
         handleCreatorBotUpdate(botToken, update);
     }
     
-    // Always respond to Telegram immediately to acknowledge receipt
     res.sendStatus(200);
 });
 
-// This is the logic for YOUR MAIN bot that creates apps
 platformBot.onText(/\/start/, (msg) => {
     const creatorWebAppUrl = `https://yichu-bro.github.io/Mini-app-factory/creator.html`;
     platformBot.sendMessage(msg.chat.id, "Welcome! This bot helps you create your own Besh Besh style Mini App. Please open the creator app to get started.", {
@@ -75,31 +65,35 @@ platformBot.onText(/\/start/, (msg) => {
     });
 });
 
-// This is the logic that runs when ANY of the created bots receive a message
 async function handleCreatorBotUpdate(botToken, update) {
     if (update.message?.text?.startsWith('/start')) {
         const tempBot = new TelegramBot(botToken);
-        await handleStartCommand(tempBot, update.message);
+        await handleStartCommand(tempBot, botToken, update.message);
     }
 }
 
-async function handleStartCommand(botInstance, message) {
+// ** REWRITTEN AND SIMPLIFIED LOGIC **
+async function handleStartCommand(botInstance, botToken, message) {
     try {
-        const botInfo = await botInstance.getMe();
-        const botUsername = botInfo.username;
-
+        // Find the creatorId by searching for the bot TOKEN, which is guaranteed to be unique.
         const creatorsRef = ref(db, 'creators');
         const creatorsSnap = await get(creatorsRef);
         let creatorId = null;
+
         if (creatorsSnap.exists()) {
-            for (const id in creatorsSnap.val()) {
-                if (creatorsSnap.val()[id].config?.botUsername === botUsername) {
+            const creatorsData = creatorsSnap.val();
+            for (const id in creatorsData) {
+                if (creatorsData[id].config?.botToken === botToken) {
                     creatorId = id;
                     break;
                 }
             }
         }
-        if (!creatorId) return;
+
+        if (!creatorId) {
+            console.error(`Could not find creator for bot token starting with ${botToken.substring(0, 10)}...`);
+            return; // Exit silently if no creator is found
+        }
 
         const config = (await get(ref(db, `creators/${creatorId}/config`))).val() || {};
         const webAppUrl = config.webAppUrl || 'https://yichu-bro.github.io/Mini-app-factory/app.html';
@@ -110,7 +104,7 @@ async function handleStartCommand(botInstance, message) {
         const userSnap = await get(userRef);
 
         if (!userSnap.exists()) {
-            const newUser = { username: userFullName, points: 0 /* other default fields */ };
+            const newUser = { username: userFullName, points: 0 /* ... other fields ... */ };
             await set(userRef, newUser);
         }
 
@@ -124,6 +118,7 @@ async function handleStartCommand(botInstance, message) {
                 }]]
             }
         });
+
     } catch (error) {
         console.error("Error in handleStartCommand:", error.message);
     }
@@ -135,7 +130,7 @@ async function handleStartCommand(botInstance, message) {
 
 app.post('/api/create-app', async (req, res) => {
     const { creatorId, botToken, appName } = req.body;
-    const backendUrl = "https://mini-app-factory.onrender.com"; // Your Render URL is hardcoded for safety
+    const backendUrl = "https://mini-app-factory.onrender.com";
 
     if (!creatorId || !botToken || !appName) {
         return res.status(400).send({ error: 'Missing required fields.' });
@@ -146,9 +141,13 @@ app.post('/api/create-app', async (req, res) => {
         const botInfo = await newBot.getMe();
 
         const webhookUrl = `${backendUrl}/${WEBHOOK_SECRET_PATH}/${botToken}`;
-        const isWebhookSet = await newBot.setWebHook(webhookUrl);
+        const isWebhookSet = await newBot.setWebHook(webhookUrl, {
+            // This helps ensure Telegram sends all types of updates
+            allowed_updates: ["message", "callback_query"] 
+        });
+        
         if (!isWebhookSet) {
-            throw new Error("Telegram failed to set the webhook. Check your bot token and server URL.");
+            throw new Error("Telegram API rejected the webhook setup. Please double-check your bot token and ensure it's not used in another server.");
         }
         
         const creatorConfigRef = ref(db, `creators/${creatorId}/config`);
@@ -156,18 +155,16 @@ app.post('/api/create-app', async (req, res) => {
             appName: appName,
             botToken: botToken,
             botUsername: botInfo.username,
-            // Add other default settings for a new app here
         });
 
         res.send({ success: true, message: 'Your app has been created and webhook is set!' });
     } catch (error) {
         console.error("CREATE APP ERROR:", error.message);
-        res.status(500).send({ error: 'Invalid Bot Token or failed to set webhook.' });
+        res.status(500).send({ error: 'Invalid Bot Token or failed to set webhook. Make sure your bot is not running anywhere else (e.g., on your local computer or another service).' });
     }
 });
 
-// All other APIs remain the same, as they are already multi-tenant and functional
-// Example:
+// All other APIs remain the same.
 app.get('/api/:creatorId/config', async (req, res) => {
     const { creatorId } = req.params;
     const configRef = ref(db, `creators/${creatorId}/config`);
