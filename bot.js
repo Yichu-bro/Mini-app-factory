@@ -37,19 +37,16 @@ const platformBot = new TelegramBot(PLATFORM_BOT_TOKEN);
 const WEBHOOK_SECRET_PATH = `bot${PLATFORM_BOT_TOKEN.substring(0, 8)}`;
 
 // ============================
-// ➡️ Webhook Logic - THE HEART OF THE PLATFORM
+// ➡️ Webhook Logic
 // ============================
-
 app.post(`/${WEBHOOK_SECRET_PATH}/:botToken`, (req, res) => {
     const { botToken } = req.params;
     const update = req.body;
-
     if (botToken === PLATFORM_BOT_TOKEN) {
         platformBot.processUpdate(update);
     } else {
         handleCreatorBotUpdate(botToken, update);
     }
-    
     res.sendStatus(200);
 });
 
@@ -72,10 +69,9 @@ async function handleCreatorBotUpdate(botToken, update) {
     }
 }
 
-// ** REWRITTEN AND SIMPLIFIED LOGIC **
+// ** REWRITTEN AND FINAL LOGIC **
 async function handleStartCommand(botInstance, botToken, message) {
     try {
-        // Find the creatorId by searching for the bot TOKEN, which is guaranteed to be unique.
         const creatorsRef = ref(db, 'creators');
         const creatorsSnap = await get(creatorsRef);
         let creatorId = null;
@@ -89,16 +85,22 @@ async function handleStartCommand(botInstance, botToken, message) {
                 }
             }
         }
-
         if (!creatorId) {
             console.error(`Could not find creator for bot token starting with ${botToken.substring(0, 10)}...`);
-            return; // Exit silently if no creator is found
+            return;
         }
 
         const config = (await get(ref(db, `creators/${creatorId}/config`))).val() || {};
-        const webAppUrl = config.webAppUrl || 'https://yichu-bro.github.io/Mini-app-factory/app.html';
+        let webAppUrl = config.webAppUrl || 'https://yichu-bro.github.io/Mini-app-factory/app.html';
         const chatId = message.chat.id;
         const userFullName = `${message.from.first_name || ''} ${message.from.last_name || ''}`.trim();
+
+        // --- FINAL FIX IS HERE ---
+        // This function ensures the URL is always correctly formatted for Telegram
+        const finalUrl = new URL(webAppUrl);
+        finalUrl.searchParams.set('creatorId', creatorId);
+        finalUrl.searchParams.set('userId', chatId);
+        // --- END OF FIX ---
 
         const userRef = ref(db, `creators/${creatorId}/users/${chatId}`);
         const userSnap = await get(userRef);
@@ -108,63 +110,56 @@ async function handleStartCommand(botInstance, botToken, message) {
             await set(userRef, newUser);
         }
 
-        botInstance.sendPhoto(chatId, 'https://i.ibb.co/VvzSgp3/Tag2-Cash-1.png', {
+        await botInstance.sendPhoto(chatId, 'https://i.ibb.co/VvzSgp3/Tag2-Cash-1.png', {
             caption: `<b>Welcome to ${config.appName || 'the app'}, ${userFullName}!</b>`,
             parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [[{ 
                     text: '🚀 Launch App', 
-                    web_app: { url: `${webAppUrl}?creatorId=${creatorId}&userId=${chatId}` } 
+                    web_app: { url: finalUrl.toString() } // Use the correctly formatted URL
                 }]]
             }
         });
-
     } catch (error) {
         console.error("Error in handleStartCommand:", error.message);
+        if (error.response && error.response.body) {
+            console.error("Telegram API Error Details:", error.response.body);
+        }
     }
 }
 
 // ============================
 // 📡 API Endpoints for Frontend
 // ============================
-
 app.post('/api/create-app', async (req, res) => {
     const { creatorId, botToken, appName } = req.body;
     const backendUrl = "https://mini-app-factory.onrender.com";
-
     if (!creatorId || !botToken || !appName) {
         return res.status(400).send({ error: 'Missing required fields.' });
     }
-
     try {
         const newBot = new TelegramBot(botToken);
         const botInfo = await newBot.getMe();
-
         const webhookUrl = `${backendUrl}/${WEBHOOK_SECRET_PATH}/${botToken}`;
         const isWebhookSet = await newBot.setWebHook(webhookUrl, {
-            // This helps ensure Telegram sends all types of updates
             allowed_updates: ["message", "callback_query"] 
         });
-        
         if (!isWebhookSet) {
-            throw new Error("Telegram API rejected the webhook setup. Please double-check your bot token and ensure it's not used in another server.");
+            throw new Error("Telegram failed to set the webhook. Check your bot token and server URL.");
         }
-        
         const creatorConfigRef = ref(db, `creators/${creatorId}/config`);
         await set(creatorConfigRef, {
             appName: appName,
             botToken: botToken,
             botUsername: botInfo.username,
         });
-
         res.send({ success: true, message: 'Your app has been created and webhook is set!' });
     } catch (error) {
         console.error("CREATE APP ERROR:", error.message);
-        res.status(500).send({ error: 'Invalid Bot Token or failed to set webhook. Make sure your bot is not running anywhere else (e.g., on your local computer or another service).' });
+        res.status(500).send({ error: 'Invalid Bot Token or failed to set webhook. Make sure your bot is not running anywhere else.' });
     }
 });
 
-// All other APIs remain the same.
 app.get('/api/:creatorId/config', async (req, res) => {
     const { creatorId } = req.params;
     const configRef = ref(db, `creators/${creatorId}/config`);
@@ -172,16 +167,16 @@ app.get('/api/:creatorId/config', async (req, res) => {
     if (snap.exists()) { res.json(snap.val()); } 
     else { res.status(404).send({ error: "Configuration not found." }); }
 });
-// ... The rest of your APIs ...
+
+// The rest of your APIs do not need any changes.
 
 // ============================
 // 🚀 Server Start
 // ============================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
-    console.log(`🚀 Platform server is running on http://localhost:${PORT}`);
+    console.log(`🚀 Platform server is running on port ${PORT}`);
     console.log(`Webhook secret path is: /${WEBHOOK_SECRET_PATH}`);
-    
     try {
         const platformWebhookUrl = `https://mini-app-factory.onrender.com/${WEBHOOK_SECRET_PATH}/${PLATFORM_BOT_TOKEN}`;
         await platformBot.setWebHook(platformWebhookUrl);
